@@ -1,7 +1,6 @@
 # Python things for OpenSCAD things
 
-def sqrt(x):
-    return x ** .5
+from math import sqrt, atan2, pi
 
 
 class Vector:
@@ -58,54 +57,77 @@ class Vector:
             and self.z == other.z
 
 
+def flatten(lst):
+    result = []
+    for x in lst:
+        if isinstance(x, list):
+            result += flatten(x)
+        else:
+            result += [x]
+    return result
+
+
+def union(*args):
+    return list(args)
+
 
 def translate(offset):
-    def func(*x):
-        pass
+    def func(*objects):
+        lst = []
+        for obj in objects:
+            if isinstance(obj, list):
+                lst += [func(subobj) for subobj in obj if subobj]
+            else:
+                lst.append("translate({}){{\n{}\n}}".format(offset, obj))
+        return lst
     return func
 
 
-def rotate(arg1, *args):
-    def func(*x):
-        pass
+def rotate(*args):
+    def func(*objects):
+        lst = []
+        for obj in objects:
+            if isinstance(obj, list):
+                lst += [func(subobj) for subobj in obj if subobj]
+            else:
+                lst.append("rotate{}{{\n{}\n}}".format(args, obj))
+        return lst
     return func
 
 
-def cube(**kwargs):
-    def func(*x):
-        pass
-    return func
+def cube(xyz=[1, 1, 1]):
+    return "cube({});".format(xyz)
 
 
-def sphere(**kwargs):
-    def func(*x):
-        pass
-    return func
+def sphere(r=1):
+    return "sphere(r={});".format(r)
 
 
-def cylinder(**kwargs):
-    def func(*x):
-        pass
-    return func
+def cylinder(r=1, h=1):
+    return "cylinder(r={}, h={});".format(r, h)
+
 
 #############################
 
 
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
+#if __name__ == "__main__":
+#    import doctest
+#    doctest.testmod()
 
-    def bar(v1, v2, r):
-        p = v2 - v1
-        R = sqrt(p.x * p.x + p.y * p.y)
-        L = sqrt(R * R + p.z * p.z)
-        return translate(v1)(
-            rotate(atan2(R, p.z), [-p.y, p.x, 0])(
-                cylinder(h=L, r=r)))
+print "$fn = 30;"
+
+def bar(v1, v2, r):
+    p = v2 - v1
+    R = sqrt(p.x * p.x + p.y * p.y)
+    L = sqrt(R * R + p.z * p.z)
+    return translate(v1)(
+        rotate((180.0 / pi) * atan2(R, p.z),
+               [-p.y, p.x, 0])(
+            cylinder(h=L, r=r)))
 
 Aa = Vector(1, 0, 0)
-Ba = Vector(-1/2, sqrt(3) / 2, 0)
-Ca = Vector(-1/2, -sqrt(3) / 2, 0)
+Ba = Vector(-0.5, sqrt(3) / 2, 0)
+Ca = Vector(-0.5, -sqrt(3) / 2, 0)
 Da = Vector(0, 0, sqrt(2))
 center = 0.25 * (Aa + Ba + Ca + Da)
 A = Aa - center
@@ -113,34 +135,41 @@ B = Ba - center
 C = Ca - center
 D = Da - center
 
-print A, B, C, D
-
 def tetrahedron(S, r):
     v1 = S * A
     v2 = S * B
     v3 = S * C
     v4 = S * D
-    bar(v1, v2, r)
-    bar(v1, v3, r)
-    bar(v1, v4, r)
-    bar(v2, v3, r)
-    bar(v2, v4, r)
-    bar(v3, v4, r)
+    return union(
+        bar(v1, v2, r),
+        bar(v1, v3, r),
+        bar(v1, v4, r),
+        bar(v2, v3, r),
+        bar(v2, v4, r),
+        bar(v3, v4, r)
+    )
 
 S = 120
 r = 0.05 * S
 
-translate(S * A)(sphere(r=r))
-translate(S * B)(sphere(r=r))
-translate(S * C)(sphere(r=r))
-translate(S * D)(sphere(r=r))
-
 def recurse(S, r, depth):
+    lst = []
     if depth > 0:
+        lst += [ tetrahedron(S, r) ]
         S, r = 0.5 * S, 0.7 * r
-        translate(S * A)(recurse(S, r, depth - 1))
-        translate(S * B)(recurse(S, r, depth - 1))
-        translate(S * C)(recurse(S, r, depth - 1))
-        translate(S * D)(recurse(S, r, depth - 1))
+        lst += [
+            translate(S * A)(recurse(S, r, depth - 1)),
+            translate(S * B)(recurse(S, r, depth - 1)),
+            translate(S * C)(recurse(S, r, depth - 1)),
+            translate(S * D)(recurse(S, r, depth - 1))
+        ]
+    return lst
 
-recurse(S, r, 4)
+for x in flatten([
+    translate(S * A)(sphere(r=r)),
+    translate(S * B)(sphere(r=r)),
+    translate(S * C)(sphere(r=r)),
+    translate(S * D)(sphere(r=r)),
+    recurse(S, r, 4)
+]):
+    print x
